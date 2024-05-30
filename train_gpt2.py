@@ -343,7 +343,7 @@ if __name__ == "__main__":
     # args error checking and convenience variables
     B, T = args.batch_size, args.sequence_length
     assert 1 <= T <= 1024
-    assert args.model in {"gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "d12", "d24", "d36", "d48"}
+    assert args.model in {"d12", "d24", "d36", "d48"}
 
     # set up DDP (distributed data parallel). torchrun sets this env variable
     # use of DDP atm demands CUDA, we set the device appropriately according to rank
