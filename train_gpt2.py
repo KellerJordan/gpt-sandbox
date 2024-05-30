@@ -2,6 +2,7 @@
 """
 
 import os
+import uuid
 import math
 import glob
 import struct
@@ -538,6 +539,12 @@ if __name__ == "__main__":
     timings = timings[-20:]
     print0(f"final {len(timings)} iters avg: {np.mean(timings)*1000:.3f}ms")
     print0(f"peak memory consumption: {torch.cuda.max_memory_allocated() // 1024 // 1024} MiB")
+
+    # -------------------------------------------------------------------------
+
+    obj = {'model': raw_model.state_dict()}
+    os.makedirs('logs', exist_ok=True)
+    torch.save(log, 'logs/%s.pt' % uuid.uuid4())
 
     # -------------------------------------------------------------------------
     # clean up nice
