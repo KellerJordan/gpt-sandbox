@@ -538,9 +538,10 @@ if __name__ == "__main__":
 
     # -------------------------------------------------------------------------
 
-    log = {'model': raw_model.state_dict()}
-    os.makedirs('logs', exist_ok=True)
-    torch.save(log, 'logs/%s.pt' % uuid.uuid4())
+    if master_process:
+        log = {'model': raw_model.state_dict()}
+        os.makedirs('logs', exist_ok=True)
+        torch.save(log, 'logs/%s.pt' % uuid.uuid4())
 
     # -------------------------------------------------------------------------
     # clean up nice
