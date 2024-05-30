@@ -336,7 +336,6 @@ if __name__ == "__main__":
     # debugging
     parser.add_argument("--overfit_single_batch", type=int, default=1, help="overfit just one batch of data")
     # memory management
-    parser.add_argument("--compile", type=int, default=0, help="torch.compile the model")
     parser.add_argument("--zero_stage", type=int, default=0, help="zero redundancy optimizer stage (0/1/2/3)")
     args = parser.parse_args()
 
@@ -387,11 +386,10 @@ if __name__ == "__main__":
     model = GPT(model_config)
     model.train()
     model.to(device)
-    if args.compile:
-        if hasattr(config, "coordinate_descent_tuning"):
-            config.coordinate_descent_tuning = True # suggested by @Chillee
-        print0("compiling the model...")
-        model = torch.compile(model)
+    if hasattr(config, "coordinate_descent_tuning"):
+        config.coordinate_descent_tuning = True # suggested by @Chillee
+    print0("compiling the model...")
+    model = torch.compile(model)
 
     # load tokens
     train_loader = DistributedDataLoader(args.input_bin, B, T, ddp_rank, ddp_world_size)
