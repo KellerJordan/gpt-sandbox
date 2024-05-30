@@ -2,6 +2,7 @@
 """
 
 import os
+import sys
 import uuid
 import math
 import glob
@@ -16,6 +17,9 @@ import torch._inductor.config as config
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from torch.distributed.optim import ZeroRedundancyOptimizer
+
+with open(sys.path[0]) as f:
+    code = f.read()
 
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
@@ -539,7 +543,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
 
     if master_process:
-        log = {'model': raw_model.state_dict()}
+        log = dict(model=raw_model.state_dict(), code=code)
         os.makedirs('logs', exist_ok=True)
         torch.save(log, 'logs/%s.pt' % uuid.uuid4())
 
