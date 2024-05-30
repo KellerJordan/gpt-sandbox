@@ -10,7 +10,6 @@ torchrun --standalone --nproc_per_node=4 train_gpt2.py \
     --batch_size 32 \
     --sequence_length 1024 \
     --total_batch_size 524288 \
-    --dtype bfloat16 \
     --compile 1 \
     --tensorcores 1 \
     --flash 1 \
