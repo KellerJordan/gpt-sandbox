@@ -538,7 +538,7 @@ if __name__ == "__main__":
 
     # -------------------------------------------------------------------------
 
-    obj = {'model': raw_model.state_dict()}
+    log = {'model': raw_model.state_dict()}
     os.makedirs('logs', exist_ok=True)
     torch.save(log, 'logs/%s.pt' % uuid.uuid4())
 
