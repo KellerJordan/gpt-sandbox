@@ -5,14 +5,13 @@ import os
 import uuid
 import math
 import glob
-import struct
 import inspect
 from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torch.nn as nn
-from torch.nn import functional as F
+from torch import nn
+import torch.nn.functional as F
 import torch._inductor.config as config
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
