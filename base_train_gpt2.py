@@ -15,7 +15,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from torch.distributed.optim import ZeroRedundancyOptimizer
 
-with open(sys.path[0]) as f:
+with open(sys.argv[0]) as f:
     code = f.read()
 
 # -----------------------------------------------------------------------------
