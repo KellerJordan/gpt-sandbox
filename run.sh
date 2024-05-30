@@ -5,7 +5,7 @@ torchrun --standalone --nproc_per_node=8 train_gpt2.py \
     --batch_size 64 \
     --sequence_length 1024 \
     --total_batch_size 524288 \
-    --val_loss_every 1000 \
+    --val_loss_every 943 \
     --num_iterations 18865 \
     --weight_decay 0.1 \
     --zero_stage 1 \
