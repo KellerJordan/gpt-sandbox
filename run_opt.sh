@@ -1,5 +1,5 @@
-# Yields 3.2856 perplexity, which is within +/- 0.001 of what the original llm.c trainer gets
-# in 10B tokens, and is roughly GPT-2 (124M) level quality.
+# Yields 3.2856 perplexity in 6.44B tokens, which is within +/- 0.001 of what the original
+# llm.c trainer gets in 10B tokens, and is roughly GPT-2 (124M) level quality.
 # The efficiency gain over the original trainer is due to (1) an increased learning rate,
 # (2) half the batch size, and (3) an improved learning rate schedule.
 # Assuming this is now properly tuned, it can serve as a baseline for comparing other optimizers
