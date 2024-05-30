@@ -1,12 +1,8 @@
-
-# the same as run124M.sh but in PyTorch
-# if you wish to train on just a single GPU, simply skip the torchrun part, i.e.
-# python train_gpt2.py ... (all the other arguments the same)
-torchrun --standalone --nproc_per_node=4 train_gpt2.py \
+torchrun --standalone --nproc_per_node=8 train_gpt2.py \
     --input_bin "data/fineweb10B/fineweb_train_*.bin" \
     --output_dir pylog124M \
     --model d12 \
-    --batch_size 32 \
+    --batch_size 64 \
     --sequence_length 1024 \
     --total_batch_size 524288 \
     --compile 1 \
