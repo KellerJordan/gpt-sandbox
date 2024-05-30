@@ -410,8 +410,9 @@ if __name__ == "__main__":
         # 2) cosine decay down to min learning rate
         decay_ratio = (it - args.warmup_iters) / (args.num_iterations - args.warmup_iters)
         assert 0 <= decay_ratio <= 1
-        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
-        return coeff * args.learning_rate
+        return (0.1 + (1 - decay_ratio)) / (0.1 + 1) * args.learning_rate
+        #coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
+        #return coeff * args.learning_rate
 
     run_id = str(uuid.uuid4())
 
