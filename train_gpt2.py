@@ -370,8 +370,7 @@ if __name__ == "__main__":
 
     # rng / reproducibility
     torch.manual_seed(42)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(42)
+    torch.cuda.manual_seed(42)
 
     # init (and write) the tokenizer
     enc = tiktoken.get_encoding("gpt2")
@@ -430,8 +429,6 @@ if __name__ == "__main__":
         with open(logfile, "w") as f:
             pass
 
-    if device == "cuda":
-        torch.cuda.reset_peak_memory_stats()
     timings = []
     norm = -1.0   # dummy value to print in inference-only mode
     for step in range(args.num_iterations + 1):
