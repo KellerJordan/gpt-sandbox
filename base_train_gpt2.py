@@ -417,11 +417,13 @@ if __name__ == "__main__":
         coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
         return min_lr + coeff * (args.learning_rate - min_lr)
 
+    run_id = str(uuid.uuid4())
+
     # create the logging directory if it does not exist
     logfile = None
     if args.output_dir:
         os.makedirs(args.output_dir, exist_ok=True)
-        logfile = os.path.join(args.output_dir, "main.log")
+        logfile = os.path.join(args.output_dir, "%s.log" % run_id)
         # create the log file "main.log" inside it, and wipe it clean
         with open(logfile, "w") as f:
             pass
@@ -529,7 +531,7 @@ if __name__ == "__main__":
     if master_process:
         log = dict(model=raw_model.state_dict(), code=code)
         os.makedirs('logs', exist_ok=True)
-        torch.save(log, 'logs/%s.pt' % uuid.uuid4())
+        torch.save(log, 'logs/%s.pt' % run_id)
 
     # -------------------------------------------------------------------------
     # clean up nice
