@@ -21,16 +21,10 @@ with open(sys.argv[0]) as f:
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
 
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        return self._norm(x.float()).type_as(x)
+def rmsnorm(x, eps=1e-6):
+    x0 = x 
+    x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps)
+    return self._norm(x.float()).type_as(x0)
 
 class CausalSelfAttention(nn.Module):
 
@@ -81,14 +75,12 @@ class Block(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.ln_1 = RMSNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
-        self.ln_2 = RMSNorm(config.n_embd)
         self.mlp = MLP(config)
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
+        x = x + self.attn(rmsnorm(x))
+        x = x + self.mlp(rmsnorm(x))
         return x
 
 # -----------------------------------------------------------------------------
@@ -112,7 +104,6 @@ class GPT(nn.Module):
             wte = nn.Embedding(config.vocab_size, config.n_embd),
             wpe = nn.Embedding(config.block_size, config.n_embd),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-            ln_f = RMSNorm(config.n_embd),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.lm_head.LLMC_SKIP_INIT = 1 # don't init this one, we will tie weights
@@ -148,7 +139,7 @@ class GPT(nn.Module):
 
         for block in self.transformer.h:
             x = block(x)
-        x = self.transformer.ln_f(x)
+        x = rmsnorm(x)
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
