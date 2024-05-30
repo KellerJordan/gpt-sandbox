@@ -1,6 +1,3 @@
-"""
-"""
-
 import os
 import sys
 import uuid
@@ -362,12 +359,8 @@ if __name__ == "__main__":
     zero_stage = args.zero_stage
     print(f"using device: {device}")
 
-    # calculate gradient accumulation from the desired total batch size and the current run configuration
     tokens_per_fwdbwd = B * T * ddp_world_size
-    assert args.total_batch_size % tokens_per_fwdbwd == 0
-    grad_accum_steps = args.total_batch_size // tokens_per_fwdbwd
-    print0(f"total desired batch size: {args.total_batch_size}")
-    print0(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+    assert args.total_batch_size == tokens_per_fwdbwd
 
     # set up a context manager following the desired dtype and device
     ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
@@ -487,28 +480,19 @@ if __name__ == "__main__":
 
         # --------------- TRAINING SECTION BEGIN -----------------
         model.train()
-        # micro-batch loop where we do gradient accumulation to reach desired total batch size
-        lossf = 0.0 # for getting the mean loss (as simple float) over the accumulation steps
-        for micro_step in range(grad_accum_steps):
-            # forward pass
-            with ctx:
-                _, loss = model(x, y, return_logits=False)
-                # we have to scale the loss to account for gradient accumulation,
-                # because the gradients just add on each successive backward().
-                # addition of gradients corresponds to a SUM in the objective, but
-                # instead of a SUM we want MEAN, so we scale the loss here
-                loss = loss / grad_accum_steps
-                lossf += loss.item() # keep track of the mean loss
-            # advance the dataset for the next batch
-            if not args.overfit_single_batch:
-                x, y = train_loader.next_batch()
-            # backward pass
-            # we want only the last micro-step to sync grads in a DDP model
-            # the official way to do this is with model.no_sync(), but that is a
-            # context manager that bloats the code, so we just toggle this variable
-            model.require_backward_grad_sync = (micro_step == grad_accum_steps - 1)
-            if not args.inference_only:
-                loss.backward()
+        # forward pass
+        with ctx:
+            _, loss = model(x, y, return_logits=False)
+            lossf = loss.item() # keep track of the mean loss
+        # advance the dataset for the next batch
+        if not args.overfit_single_batch:
+            x, y = train_loader.next_batch()
+        # backward pass
+        # we want only the last micro-step to sync grads in a DDP model
+        # the official way to do this is with model.no_sync(), but that is a
+        # context manager that bloats the code, so we just toggle this variable
+        if not args.inference_only:
+            loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         # determine and set the learning rate for this iteration
         lr = get_lr(step)
@@ -524,7 +508,7 @@ if __name__ == "__main__":
         # time and print
         t1 = time.time()
         # the 0th iteration is often an outlier (much slower) => skip logging it
-        tokens_per_second = grad_accum_steps * ddp_world_size * B * T / (t1-t0)
+        tokens_per_second = ddp_world_size * B * T / (t1-t0)
         print0(f"step {step+1:4d}/{args.num_iterations} | train loss {lossf:.6f} | norm {norm:.4f} | lr {lr:.2e} | ({(t1-t0)*1000:.2f} ms | {tokens_per_second:.0f} tok/s)")
         # log to logile
         if master_process and logfile is not None:
