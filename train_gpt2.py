@@ -1,19 +1,4 @@
 """
-Reference code for GPT-2 training and inference.
-Will save the model weights into files, to be read from C as initialization.
-
-References:
-1) the official GPT-2 TensorFlow implementation released by OpenAI:
-https://github.com/openai/gpt-2/blob/master/src/model.py
-2) huggingface/transformers PyTorch implementation:
-https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py
-
-Example launches to only benchmark the speed of bfloat16 compiled GPU training:
-1 GPU:
-python train_gpt2.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
-you can also turn on flash-attention by appending --flash=1
-4 GPU:
-torchrun --standalone --nproc_per_node=4 train_gpt2.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
 """
 
 import os
@@ -21,7 +6,6 @@ import math
 import glob
 import struct
 import inspect
-from contextlib import nullcontext
 from dataclasses import dataclass
 
 import numpy as np
@@ -159,10 +143,9 @@ class GPT(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02, generator=self.init_rng)
 
     def forward(self, idx, targets=None, return_logits=True):
-        device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-        pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
+        pos = torch.arange(0, t, dtype=torch.long, device=idx.device) # shape (t)
 
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
@@ -188,55 +171,6 @@ class GPT(nn.Module):
 
         return logits, loss
 
-    @classmethod
-    def from_pretrained(cls, model_type):
-        """Loads pretrained GPT-2 model weights from huggingface"""
-        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
-        from transformers import GPT2LMHeadModel
-        print("loading weights from pretrained gpt: %s" % model_type)
-
-        # n_layer, n_head and n_embd are determined from model_type
-        config_args = {
-            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
-            'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), # 350M params
-            'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
-            'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
-        }[model_type]
-        config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
-        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
-        # create a from-scratch initialized minGPT model
-        config = GPTConfig(**config_args)
-        model = GPT(config)
-        sd = model.state_dict()
-        sd_keys = sd.keys()
-        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')] # discard this mask / buffer, not a param
-
-        # init a huggingface/transformers model
-        model_hf = GPT2LMHeadModel.from_pretrained(model_type)
-        sd_hf = model_hf.state_dict()
-
-        # copy while ensuring all of the parameters are aligned and match in names and shapes
-        sd_keys_hf = sd_hf.keys()
-        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')] # ignore these, just a buffer
-        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')] # same, just the mask (buffer)
-        transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
-        # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla Linear
-        # this means that we have to transpose these weights when we import them
-        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
-        for k in sd_keys_hf:
-            if any(k.endswith(w) for w in transposed):
-                # special treatment for the Conv1D weights we need to transpose
-                assert sd_hf[k].shape[::-1] == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k].t())
-            else:
-                # vanilla copy over the other parameters
-                assert sd_hf[k].shape == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k])
-
-        return model
-
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type, zero_stage):
         # start with all of the candidate parameters
         param_dict = {pn: p for pn, p in self.named_parameters()}
@@ -256,7 +190,7 @@ class GPT(nn.Module):
         print0(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
         # Create AdamW optimizer and use the fused version if it is available
         fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
-        use_fused = fused_available and device_type == 'cuda'
+        use_fused = fused_available
         print0(f"using fused AdamW: {use_fused}")
         if zero_stage == 1:
             print0("using ZeroRedundancyOptimizer")
@@ -563,10 +497,8 @@ if __name__ == "__main__":
     # numerics
     parser.add_argument("--tensorcores", type=int, default=0, help="use tensorcores")
     # memory management
-    parser.add_argument("--device", type=str, default="", help="by default we autodetect, or set it here")
     parser.add_argument("--compile", type=int, default=0, help="torch.compile the model")
     parser.add_argument("--flash", type=int, default=0, help="use flash attention")
-    parser.add_argument("--dtype", type=str, default="float32", help="float32|float16|bfloat16")
     parser.add_argument("--zero_stage", type=int, default=0, help="zero redundancy optimizer stage (0/1/2/3)")
     # python -> C bridge
     parser.add_argument("--write_tensors", type=int, default=1, help="write tensors to disk")
@@ -579,39 +511,18 @@ if __name__ == "__main__":
     assert args.model in {"gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "d12", "d24", "d36", "d48"}
 
     # set up DDP (distributed data parallel). torchrun sets this env variable
-    ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
-    if ddp:
-        # use of DDP atm demands CUDA, we set the device appropriately according to rank
-        assert torch.cuda.is_available(), "for now i think we need CUDA for DDP"
-        init_process_group(backend='nccl')
-        ddp_rank = int(os.environ['RANK'])
-        ddp_local_rank = int(os.environ['LOCAL_RANK'])
-        ddp_world_size = int(os.environ['WORLD_SIZE'])
-        device = f'cuda:{ddp_local_rank}'
-        torch.cuda.set_device(device)
-        master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
-        seed_offset = 0 # each process gets the exact same seed
-        zero_stage = args.zero_stage
-    else:
-        ddp_rank = 0
-        ddp_local_rank = 0
-        zero_stage = 0
-        ddp_world_size = 1
-        master_process = True
-        seed_offset = 0
-        # select the device
-        if args.device:
-            # provided explicitly by the user
-            device = args.device
-        else:
-            # attempt to autodetect the device
-            device = "cpu"
-            if torch.cuda.is_available():
-                device = "cuda"
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                device = "mps"
+    # use of DDP atm demands CUDA, we set the device appropriately according to rank
+    assert torch.cuda.is_available(), "for now i think we need CUDA for DDP"
+    init_process_group(backend='nccl')
+    ddp_rank = int(os.environ['RANK'])
+    ddp_local_rank = int(os.environ['LOCAL_RANK'])
+    ddp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{ddp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
+    seed_offset = 0 # each process gets the exact same seed
+    zero_stage = args.zero_stage
     print(f"using device: {device}")
-    device_type = 'cuda' if 'cuda' in device else 'cpu'
 
     # calculate gradient accumulation from the desired total batch size and the current run configuration
     tokens_per_fwdbwd = B * T * ddp_world_size
@@ -621,8 +532,7 @@ if __name__ == "__main__":
     print0(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 
     # set up a context manager following the desired dtype and device
-    ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[args.dtype]
-    ctx = torch.amp.autocast(device_type=device_type, dtype=ptdtype) if device_type == "cuda" else nullcontext()
+    ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
 
     # rng / reproducibility
     torch.manual_seed(42)
@@ -643,19 +553,14 @@ if __name__ == "__main__":
     if master_process and args.write_tensors: # tokenizer is technically not tensors but ok
         write_tokenizer(enc, "gpt2_tokenizer.bin")
 
-    # init the model, either from scratch or from OpenAI pretrained checkpoint
-    if args.model[0] == "d":
-        # from scratch (random weights)
-        model_config = {
-            "d12": GPTConfig(block_size=1024, vocab_size=50257, n_layer=12, n_head=12, n_embd=768),
-            "d24": GPTConfig(block_size=1024, vocab_size=50257, n_layer=24, n_head=16, n_embd=1024),
-            "d36": GPTConfig(block_size=1024, vocab_size=50257, n_layer=36, n_head=20, n_embd=1280),
-            "d48": GPTConfig(block_size=1024, vocab_size=50257, n_layer=48, n_head=25, n_embd=1600),
-        }[args.model]
-        model = GPT(model_config)
-    else:
-        # load the GPT-2 model weights
-        model = GPT.from_pretrained(args.model)
+    # init the model from scratch
+    model_config = {
+        "d12": GPTConfig(block_size=1024, vocab_size=50257, n_layer=12, n_head=12, n_embd=768),
+        "d24": GPTConfig(block_size=1024, vocab_size=50257, n_layer=24, n_head=16, n_embd=1024),
+        "d36": GPTConfig(block_size=1024, vocab_size=50257, n_layer=36, n_head=20, n_embd=1280),
+        "d48": GPTConfig(block_size=1024, vocab_size=50257, n_layer=48, n_head=25, n_embd=1600),
+    }[args.model]
+    model = GPT(model_config)
     model.train()
     model.to(device)
     if args.compile:
@@ -696,9 +601,8 @@ if __name__ == "__main__":
     # STAGE 2: training loop
 
     # here we wrap model into DDP container
-    if ddp:
-        model = DDP(model, device_ids=[ddp_local_rank])
-    raw_model = model.module if ddp else model # always contains the "raw" unwrapped model
+    model = DDP(model, device_ids=[ddp_local_rank])
+    raw_model = model.module # always contains the "raw" unwrapped model
 
     # init the optimizer
     optimizer = raw_model.configure_optimizers(weight_decay=args.weight_decay,
@@ -803,11 +707,10 @@ if __name__ == "__main__":
                 x, y = train_loader.next_batch()
                 x, y = x.to(device), y.to(device)
             # backward pass
-            if ddp:
-                # we want only the last micro-step to sync grads in a DDP model
-                # the official way to do this is with model.no_sync(), but that is a
-                # context manager that bloats the code, so we just toggle this variable
-                model.require_backward_grad_sync = (micro_step == grad_accum_steps - 1)
+            # we want only the last micro-step to sync grads in a DDP model
+            # the official way to do this is with model.no_sync(), but that is a
+            # context manager that bloats the code, so we just toggle this variable
+            model.require_backward_grad_sync = (micro_step == grad_accum_steps - 1)
             if not args.inference_only:
                 loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -821,11 +724,7 @@ if __name__ == "__main__":
         # --------------- TRAINING SECTION END -------------------
         # everything that follows now is just diagnostics, prints, logging, etc.
 
-        # wait on the CPU for all device work to end so we get accurate per-iteration timings below
-        if device == "mps":
-            torch.mps.synchronize()
-        elif device == "cuda":
-            torch.cuda.synchronize()
+        torch.cuda.synchronize()
         # time and print
         t1 = time.time()
         # the 0th iteration is often an outlier (much slower) => skip logging it
@@ -847,5 +746,4 @@ if __name__ == "__main__":
 
     # -------------------------------------------------------------------------
     # clean up nice
-    if ddp:
-        destroy_process_group()
+    destroy_process_group()
