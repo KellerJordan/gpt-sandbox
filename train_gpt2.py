@@ -21,10 +21,10 @@ with open(sys.argv[0]) as f:
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
 
-def rmsnorm(x, eps=1e-6):
-    x0 = x 
+def rmsnorm(x0, eps=1e-6):
+    x = x0.float()
     x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps)
-    return self._norm(x.float()).type_as(x0)
+    return x.type_as(x0)
 
 class CausalSelfAttention(nn.Module):
 
