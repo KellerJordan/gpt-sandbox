@@ -41,8 +41,7 @@ always_save_checkpoint = True # if True, always save a checkpoint after each eva
 init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # data
 dataset = 'openwebtext'
-gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
-batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size = 60
 block_size = 1024
 # model
 n_layer = 12
@@ -81,10 +80,7 @@ torch.cuda.set_device(device)
 master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
 seed_offset = ddp_rank # each process gets a different seed
 # world_size number of processes will be training simultaneously, so we can scale
-# down the desired gradient accumulation iterations per process proportionally
-assert gradient_accumulation_steps % ddp_world_size == 0
-gradient_accumulation_steps //= ddp_world_size
-tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
+tokens_per_iter = ddp_world_size * batch_size * block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 if master_process:
@@ -251,21 +247,13 @@ while True:
     if iter_num == 0 and eval_only:
         break
 
-    # forward backward update, with optional gradient accumulation to simulate larger batch size
-    # and using the GradScaler if data type is float16
-    for micro_step in range(gradient_accumulation_steps):
-        # in DDP training we only need to sync gradients at the last micro step.
-        # the official way to do this is with model.no_sync() context manager, but
-        # I really dislike that this bloats the code and forces us to repeat code
-        # looking at the source of that context manager, it just toggles this variable
-        model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
-        with ctx:
-            logits, loss = model(X, Y)
-            loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
-        # immediately async prefetch next batch while model is doing the forward pass on the GPU
-        X, Y = get_batch('train')
-        # backward pass
-        loss.backward()
+    # forward backward update
+    with ctx:
+        logits, loss = model(X, Y)
+    # immediately async prefetch next batch while model is doing the forward pass on the GPU
+    X, Y = get_batch('train')
+    # backward pass
+    loss.backward()
     # clip the gradient
     if grad_clip != 0.0:
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -281,9 +269,9 @@ while True:
     if iter_num % log_interval == 0 and master_process:
         # get loss as float. note: this is a CPU-GPU sync point
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
-        lossf = loss.item() * gradient_accumulation_steps
+        lossf = loss.item()
         if local_iter_num >= 5: # let the training loop settle a bit
-            mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
+            mfu = raw_model.estimate_mfu(batch_size, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
         print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
     iter_num += 1
