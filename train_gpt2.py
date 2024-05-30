@@ -288,10 +288,9 @@ class DistributedDataLoader:
         x = (buf[:-1]).view(B, T) # inputs
         y = (buf[1:]).view(B, T) # targets
         # advance current position and load next shard if necessary
+        self.current_position += B * T * self.num_processes
         if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
             self.advance()
-        else:
-            self.current_position += B * T * self.num_processes
         return x, y
 
 # -----------------------------------------------------------------------------
@@ -394,9 +393,6 @@ if __name__ == "__main__":
         print0("compiling the model...")
         model = torch.compile(model)
 
-    # -------------------------------------------------------------------------
-    # Our own version of a simple DistributedDataLoader
-
     # load tokens
     train_loader = DistributedDataLoader(args.input_bin, B, T, ddp_rank, ddp_world_size)
     val_loader = None
@@ -404,12 +400,6 @@ if __name__ == "__main__":
         val_loader = DistributedDataLoader(args.input_val_bin, B, T, ddp_rank, ddp_world_size)
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
-
-    # -------------------------------------------------------------------------
-    # STAGE 1: weights / state logging for C to load later
-
-    # -------------------------------------------------------------------------
-    # STAGE 2: training loop
 
     # here we wrap model into DDP container
     model = DDP(model, device_ids=[ddp_local_rank])
