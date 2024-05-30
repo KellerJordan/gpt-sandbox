@@ -421,7 +421,7 @@ if __name__ == "__main__":
 
     # create the logging directory if it does not exist
     logfile = None
-    if args.output_dir:
+    if master_process and args.output_dir:
         os.makedirs(args.output_dir, exist_ok=True)
         logfile = os.path.join(args.output_dir, "%s.log" % run_id)
         # create the log file "main.log" inside it, and wipe it clean
