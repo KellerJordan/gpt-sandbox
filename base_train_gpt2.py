@@ -327,7 +327,6 @@ if __name__ == "__main__":
     # optimization
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="learning rate warmup iterations")
     parser.add_argument("--warmup_iters", type=int, default=0, help="learning rate warmup iterations")
-    parser.add_argument("--learning_rate_decay_frac", type=float, default=1.0, help="learning rate warmup iterations")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
     parser.add_argument("--grad_clip", type=float, default=1.0, help="maximum gradient magnitude")
     # evaluation
@@ -404,18 +403,15 @@ if __name__ == "__main__":
 
     # learning rate decay scheduler (cosine with warmup)
     def get_lr(it):
-        min_lr = args.learning_rate * args.learning_rate_decay_frac
+        assert it <= args.num_iterations
         # 1) linear warmup for warmup_iters steps
         if it < args.warmup_iters:
             return args.learning_rate * (it+1) / args.warmup_iters
-        # 2) if it > lr_decay_iters, return min learning rate
-        if it > args.num_iterations:
-            return min_lr
-        # 3) in between, use cosine decay down to min learning rate
+        # 2) cosine decay down to min learning rate
         decay_ratio = (it - args.warmup_iters) / (args.num_iterations - args.warmup_iters)
         assert 0 <= decay_ratio <= 1
         coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
-        return min_lr + coeff * (args.learning_rate - min_lr)
+        return coeff * (args.learning_rate - min_lr)
 
     run_id = str(uuid.uuid4())
 

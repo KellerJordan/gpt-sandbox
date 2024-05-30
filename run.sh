@@ -12,5 +12,4 @@ torchrun --standalone --nproc_per_node=8 base_train_gpt2.py \
     --zero_stage 1 \
     --learning_rate 0.0006 \
     --warmup_iters 700 \
-    --learning_rate_decay_frac 0.0 \
     --overfit_single_batch 0
