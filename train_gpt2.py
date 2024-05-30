@@ -291,7 +291,7 @@ class DistributedDataLoader:
         self.current_position += B * T * self.num_processes
         if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
             self.advance()
-        return x, y
+        return x.cuda(), y.cuda()
 
 # -----------------------------------------------------------------------------
 # int main
@@ -384,8 +384,7 @@ if __name__ == "__main__":
         "d48": GPTConfig(block_size=1024, vocab_size=50257, n_layer=48, n_head=25, n_embd=1600),
     }[args.model]
     model = GPT(model_config)
-    model.train()
-    model.to(device)
+    model = model.train().cuda()
     if hasattr(config, "coordinate_descent_tuning"):
         config.coordinate_descent_tuning = True # suggested by @Chillee
     print0("compiling the model...")
@@ -397,7 +396,6 @@ if __name__ == "__main__":
     if args.input_val_bin:
         val_loader = DistributedDataLoader(args.input_val_bin, B, T, ddp_rank, ddp_world_size)
     x, y = train_loader.next_batch()
-    x, y = x.to(device), y.to(device)
 
     # here we wrap model into DDP container
     model = DDP(model, device_ids=[ddp_local_rank])
@@ -450,7 +448,6 @@ if __name__ == "__main__":
                 val_loss = 0.0
                 for _ in range(args.val_max_steps):
                     x, y = val_loader.next_batch()
-                    x, y = x.to(device), y.to(device)
                     _, loss = model(x, y, return_logits=False)
                     val_loss += loss.item()
                 val_loss /= args.val_max_steps
@@ -504,7 +501,6 @@ if __name__ == "__main__":
             # advance the dataset for the next batch
             if not args.overfit_single_batch:
                 x, y = train_loader.next_batch()
-                x, y = x.to(device), y.to(device)
             # backward pass
             # we want only the last micro-step to sync grads in a DDP model
             # the official way to do this is with model.no_sync(), but that is a
