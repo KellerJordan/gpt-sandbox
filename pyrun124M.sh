@@ -11,8 +11,6 @@ torchrun --standalone --nproc_per_node=4 train_gpt2.py \
     --sequence_length 1024 \
     --total_batch_size 524288 \
     --compile 1 \
-    --tensorcores 1 \
-    --flash 1 \
     --num_iterations 18865 \
     --weight_decay 0.1 \
     --zero_stage 1 \

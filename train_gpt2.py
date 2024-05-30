@@ -25,9 +25,6 @@ class NewGELU(nn.Module):
     def forward(self, input):
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
-# using a global to toggle flash-attention
-FLASH = 0
-
 class CausalSelfAttention(nn.Module):
 
     def __init__(self, config):
@@ -53,16 +50,7 @@ class CausalSelfAttention(nn.Module):
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        if FLASH:
-            # flashattention
-            y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-        else:
-            # manual implementation of attention
-            # this materializes the large (T,T) matrix for all the queries and keys
-            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-            att = F.softmax(att, dim=-1)
-            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
         # output projection
         y = self.c_proj(y)
@@ -494,11 +482,8 @@ if __name__ == "__main__":
     parser.add_argument("--sample_every", type=int, default=0, help="how often to sample from the model?")
     # debugging
     parser.add_argument("--overfit_single_batch", type=int, default=1, help="overfit just one batch of data")
-    # numerics
-    parser.add_argument("--tensorcores", type=int, default=0, help="use tensorcores")
     # memory management
     parser.add_argument("--compile", type=int, default=0, help="torch.compile the model")
-    parser.add_argument("--flash", type=int, default=0, help="use flash attention")
     parser.add_argument("--zero_stage", type=int, default=0, help="zero redundancy optimizer stage (0/1/2/3)")
     # python -> C bridge
     parser.add_argument("--write_tensors", type=int, default=1, help="write tensors to disk")
@@ -537,15 +522,6 @@ if __name__ == "__main__":
     torch.manual_seed(42)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
-
-    # set the torch precision mode to use TensorFloat32 (TF32) for matmuls
-    # docs https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html
-    if args.tensorcores:
-        torch.set_float32_matmul_precision('high')
-
-    # turn on/off flash attention
-    assert args.flash in {0, 1}
-    FLASH = args.flash
 
     # init (and write) the tokenizer
     enc = tiktoken.get_encoding("gpt2")
