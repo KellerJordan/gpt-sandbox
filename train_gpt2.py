@@ -156,12 +156,8 @@ class GPT(nn.Module):
 
         return logits, loss
 
-    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type, zero_stage):
-        # Create AdamW optimizer and use the fused version if it is available
-        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
-        use_fused = fused_available
-        print0(f"using fused AdamW: {use_fused}")
-        optimizer = torch.optim.AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=betas, fused=use_fused)
+    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=betas)
         return optimizer
 
     @torch.no_grad()
@@ -308,8 +304,6 @@ if __name__ == "__main__":
     parser.add_argument("--sample_every", type=int, default=0, help="how often to sample from the model?")
     # debugging
     parser.add_argument("--overfit_single_batch", type=int, default=1, help="overfit just one batch of data")
-    # memory management
-    parser.add_argument("--zero_stage", type=int, default=0, help="zero redundancy optimizer stage (0/1/2/3)")
     args = parser.parse_args()
 
     # args error checking and convenience variables
@@ -328,7 +322,6 @@ if __name__ == "__main__":
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
     seed_offset = 0 # each process gets the exact same seed
-    zero_stage = args.zero_stage
     print(f"using device: {device}")
 
     tokens_per_fwdbwd = B * T * ddp_world_size
@@ -372,7 +365,7 @@ if __name__ == "__main__":
     # init the optimizer
     optimizer = raw_model.configure_optimizers(weight_decay=args.weight_decay,
                                                learning_rate=args.learning_rate, betas=(0.9, 0.95),
-                                               device_type=device, zero_stage=zero_stage)
+                                               device_type=device)
 
     # learning rate decay scheduler (cosine with warmup)
     def get_lr(it):
