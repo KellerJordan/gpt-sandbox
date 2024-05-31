@@ -1,4 +1,4 @@
-torchrun --standalone --nproc_per_node=8 train_gpt2.py \
+torchrun --standalone --nproc_per_node=8 base_train_gpt2.py \
     --input_bin "data/fineweb10B/fineweb_train_*.bin" \
     --input_val_bin "data/fineweb10B/fineweb_val_*.bin" \
     --output_dir pylog124M \
