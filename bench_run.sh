@@ -9,7 +9,6 @@ torchrun --standalone --nproc_per_node=8 train_gpt2.py \
     --val_loss_every 128 \
     --num_iterations 2048 \
     --weight_decay 0.1 \
-    --zero_stage 1 \
     --learning_rate 0.0020 \
     --warmup_iters 256 \
     --overfit_single_batch 0
