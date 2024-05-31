@@ -112,12 +112,10 @@ class GPT(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear) and not hasattr(module, 'LLMC_SKIP_INIT'):
+        if (isinstance(module, nn.Linear) or isinstance(module, nn.Embedding)) and not hasattr(module, 'LLMC_SKIP_INIT'):
             # apply special scaled init to the residual projections, per GPT-2 paper
             std = 0.02 if not hasattr(module, 'LLMC_RESIDUAL_SCALE_FLAG') else 0.02/math.sqrt(2 * self.config.n_layer)
             torch.nn.init.normal_(module.weight, mean=0.0, std=std, generator=self.init_rng)
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02, generator=self.init_rng)
 
     def forward(self, idx, targets=None, return_logits=True):
         b, t = idx.size()
