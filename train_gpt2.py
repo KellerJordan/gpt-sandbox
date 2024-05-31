@@ -161,13 +161,7 @@ class GPT(nn.Module):
         fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
         use_fused = fused_available
         print0(f"using fused AdamW: {use_fused}")
-        if zero_stage == 1:
-            print0("using ZeroRedundancyOptimizer")
-            optimizer = ZeroRedundancyOptimizer(params=self.parameters(), optimizer_class=torch.optim.AdamW,
-                                                lr=learning_rate, weight_decay=weight_decay, betas=betas, fused=use_fused)
-        else:
-            print0("using regular AdamW")
-            optimizer = torch.optim.AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=betas, fused=use_fused)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=betas, fused=use_fused)
         return optimizer
 
     @torch.no_grad()
