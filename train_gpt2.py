@@ -276,7 +276,6 @@ if __name__ == "__main__":
     parser.add_argument("--total_batch_size", type=int, default=256, help="total desired batch size, in units of #tokens")
     # workload (number of steps)
     parser.add_argument("--num_iterations", type=int, default=10, help="number of iterations to run")
-    parser.add_argument("--inference_only", type=int, default=0, help="only run inference")
     # optimization
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="learning rate warmup iterations")
     parser.add_argument("--warmup_iters", type=int, default=0, help="learning rate warmup iterations")
@@ -440,8 +439,7 @@ if __name__ == "__main__":
         # we want only the last micro-step to sync grads in a DDP model
         # the official way to do this is with model.no_sync(), but that is a
         # context manager that bloats the code, so we just toggle this variable
-        if not args.inference_only:
-            loss.backward()
+        loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         # determine and set the learning rate for this iteration
         lr = get_lr(step)
