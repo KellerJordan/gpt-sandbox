@@ -262,8 +262,6 @@ if __name__ == "__main__":
     import tiktoken
     print0(f"Running pytorch {torch.version.__version__}")
 
-    # default settings will overfit a tiny batch of data
-    # and save model weights and debug state to disk on the first iteration
     parser = argparse.ArgumentParser()
     # file system input / output
     parser.add_argument("--input_bin", type=str, default="dev/data/tinyshakespeare/tiny_shakespeare_val.bin", help="input .bin to train on")
@@ -285,8 +283,6 @@ if __name__ == "__main__":
     parser.add_argument("--val_loss_every", type=int, default=0, help="every how mant steps to evaluate val loss?")
     parser.add_argument("--val_max_steps", type=int, default=20, help="how many batches of val to average?")
     parser.add_argument("--sample_every", type=int, default=0, help="how often to sample from the model?")
-    # debugging
-    parser.add_argument("--overfit_single_batch", type=int, default=1, help="overfit just one batch of data")
     args = parser.parse_args()
 
     # args error checking and convenience variables
@@ -431,10 +427,8 @@ if __name__ == "__main__":
         # forward pass
         with ctx:
             _, loss = model(x, y, return_logits=False)
-            lossf = loss.item() # keep track of the mean loss
         # advance the dataset for the next batch
-        if not args.overfit_single_batch:
-            x, y = train_loader.next_batch()
+        x, y = train_loader.next_batch()
         # backward pass
         # we want only the last micro-step to sync grads in a DDP model
         # the official way to do this is with model.no_sync(), but that is a
@@ -456,6 +450,7 @@ if __name__ == "__main__":
         t1 = time.time()
         # the 0th iteration is often an outlier (much slower) => skip logging it
         tokens_per_second = ddp_world_size * B * T / (t1-t0)
+        lossf = loss.item() # keep track of the mean loss
         print0(f"step {step+1:4d}/{args.num_iterations} | train loss {lossf:.6f} | norm {norm:.4f} | lr {lr:.2e} | ({(t1-t0)*1000:.2f} ms | {tokens_per_second:.0f} tok/s)")
         # log to logile
         if master_process and logfile is not None:
