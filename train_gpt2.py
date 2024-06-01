@@ -281,10 +281,6 @@ if __name__ == "__main__":
     # set up a context manager following the desired dtype and device
     ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
 
-    # rng / reproducibility
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
-
     # init (and write) the tokenizer
     enc = tiktoken.get_encoding("gpt2")
 
