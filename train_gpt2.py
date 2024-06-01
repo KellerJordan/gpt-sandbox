@@ -35,7 +35,6 @@ class CausalSelfAttention(nn.Module):
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=False)
         # output projection
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
-        self.c_proj.LLMC_RESIDUAL_SCALE_FLAG = 1
         # regularization
         self.n_head = config.n_head
         self.n_embd = config.n_embd
@@ -52,6 +51,7 @@ class CausalSelfAttention(nn.Module):
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
         # output projection
         y = self.c_proj(y)
+        y = y / math.sqrt(24)
         return y
 
 class MLP(nn.Module):
@@ -60,7 +60,6 @@ class MLP(nn.Module):
         super().__init__()
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=False)
         self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=False)
-        self.c_proj.LLMC_RESIDUAL_SCALE_FLAG = 1
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -112,11 +111,7 @@ class GPT(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            # apply special scaled init to the residual projections, per GPT-2 paper
-            if hasattr(module, 'LLMC_RESIDUAL_SCALE_FLAG'):
-                std = 0.02/math.sqrt(2 * self.config.n_layer)
-                torch.nn.init.normal_(module.weight, mean=0.0, std=std, generator=self.init_rng)
+        # initialize the position embedding at std=0.02 to match the scale of the token embedding.
         if isinstance(module, nn.Embedding) and not hasattr(module, 'LLMC_SKIP_INIT'):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02, generator=self.init_rng)
 
