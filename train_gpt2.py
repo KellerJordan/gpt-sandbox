@@ -324,12 +324,10 @@ if __name__ == "__main__":
         # 1) linear warmup for warmup_iters steps
         if it < args.warmup_iters:
             return args.learning_rate * (it+1) / args.warmup_iters
-        # 2) cosine decay down to min learning rate
+        # 2) linear decay down to min learning rate
         decay_ratio = (it - args.warmup_iters) / (args.num_iterations - args.warmup_iters)
         assert 0 <= decay_ratio <= 1
         return (0.1 + (1 - decay_ratio)) / (0.1 + 1) * args.learning_rate
-        #coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
-        #return coeff * args.learning_rate
 
     run_id = str(uuid.uuid4())
 
@@ -382,9 +380,6 @@ if __name__ == "__main__":
         # advance the dataset for the next batch
         x, y = train_loader.next_batch()
         # backward pass
-        # we want only the last micro-step to sync grads in a DDP model
-        # the official way to do this is with model.no_sync(), but that is a
-        # context manager that bloats the code, so we just toggle this variable
         loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         # determine and set the learning rate for this iteration
