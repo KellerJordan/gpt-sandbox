@@ -111,7 +111,8 @@ class GPT(nn.Module):
         self.init_rng.manual_seed(42)
         self.apply(self._init_weights)
 
-    if isinstance(module, nn.Linear):
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
             # apply special scaled init to the residual projections, per GPT-2 paper
             if hasattr(module, 'LLMC_RESIDUAL_SCALE_FLAG'):
                 std = 0.02/math.sqrt(2 * self.config.n_layer)
