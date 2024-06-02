@@ -58,13 +58,16 @@ parser.add_argument("-s", "--shard_size", type=int, default=10**8, help="Size of
 args = parser.parse_args()
 
 # FineWeb has a few possible subsamples available
-assert args.version in ["10B", "100B"], "version must be one of 10B, 100B"
+assert args.version in ["10B", "100B", "350B"], "version must be one of 10B, 100B, 350B"
 if args.version == "10B":
     local_dir = "fineweb10B"
     remote_name = "sample-10BT"
 elif args.version == "100B":
     local_dir = "fineweb100B"
     remote_name = "sample-100BT"
+elif args.version == "350B":
+    local_dir = "fineweb350B"
+    remote_name = "sample-350BT"
 
 # create the cache the local directory if it doesn't exist yet
 DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
