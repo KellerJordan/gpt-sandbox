@@ -320,7 +320,7 @@ if __name__ == "__main__":
             return args.learning_rate
         # 3) linear warmdown
         else:
-            decay_ratio = (args.num_iterations - it) / warmdown_iters
+            decay_ratio = (args.num_iterations - it) / args.warmdown_iters
             return args.learning_rate * decay_ratio
 
     run_id = str(uuid.uuid4())
