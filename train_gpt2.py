@@ -128,18 +128,10 @@ class GPT(nn.Module):
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
-            wpe = nn.Embedding(config.block_size, config.n_embd),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.lm_head.LLMC_SKIP_INIT = 1 # don't init this one, we will tie weights
         self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        # initialize the position embedding at std=0.02 to match the scale of the token embedding.
-        if isinstance(module, nn.Embedding) and not hasattr(module, 'LLMC_SKIP_INIT'):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None, return_logits=True):
         b, t = idx.size()
@@ -147,9 +139,7 @@ class GPT(nn.Module):
         pos = torch.arange(0, t, dtype=torch.long, device=idx.device) # shape (t)
 
         # forward the GPT model itself
-        tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
-        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
-        x = tok_emb + pos_emb
+        x = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
 
         for block in self.transformer.h:
             x = block(x)
