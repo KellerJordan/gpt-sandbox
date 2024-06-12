@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from torch import nn
+import torch.distributed as dist
 import torch.nn.functional as F
 import torch._inductor.config as config
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -263,7 +264,6 @@ if __name__ == "__main__":
     # token layout for each step of the optimization
     parser.add_argument("--batch_size", type=int, default=4, help="batch size, in units of #batch dimensions")
     parser.add_argument("--sequence_length", type=int, default=64, help="sequence length")
-    parser.add_argument("--total_batch_size", type=int, default=256, help="total desired batch size, in units of #tokens")
     # workload (number of steps)
     parser.add_argument("--num_iterations", type=int, default=10, help="number of iterations to run")
     # optimization
@@ -296,7 +296,6 @@ if __name__ == "__main__":
     print(f"using device: {device}")
 
     tokens_per_fwdbwd = B * T * ddp_world_size
-    assert args.total_batch_size == tokens_per_fwdbwd
 
     # set up a context manager following the desired dtype and device
     ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
@@ -372,7 +371,8 @@ if __name__ == "__main__":
                 for _ in range(args.val_max_steps):
                     x_val, y_val = val_loader.next_batch()
                     _, loss = model(x_val, y_val, return_logits=False)
-                    val_loss += loss.item()
+                    val_loss += loss
+                dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
                 val_loss /= args.val_max_steps
             # log to console and to file
             print0(f"val loss {val_loss}")
@@ -392,6 +392,7 @@ if __name__ == "__main__":
         # forward pass
         with ctx:
             _, loss = model(x, y, return_logits=False)
+            train_loss = loss.detach()
         # advance the dataset for the next batch
         x, y = train_loader.next_batch()
         # backward pass
@@ -413,7 +414,8 @@ if __name__ == "__main__":
         t1 = time.time()
         # the 0th iteration is often an outlier (much slower) => skip logging it
         tokens_per_second = ddp_world_size * B * T / (t1-t0)
-        lossf = loss.item() # keep track of the mean loss
+        dist.all_reduce(train_loss, op=dist.ReduceOp.AVG)
+        lossf = train_loss.item() # keep track of the mean loss
         print0(f"step {step+1:4d}/{args.num_iterations} | train loss {lossf:.6f} | lr {lr:.2e} | ({(t1-t0)*1000:.2f} ms | {tokens_per_second:.0f} tok/s)")
         # log to logile
         if master_process and logfile is not None:
