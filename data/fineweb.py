@@ -16,6 +16,7 @@ example doc to highlight the structure of the dataset:
 }
 """
 import os
+os.environ['HF_DATASETS_CACHE'] = '/data-4/keller/cache/'
 import argparse
 import multiprocessing as mp
 import numpy as np
@@ -55,6 +56,7 @@ def write_datafile(filename, toks):
 parser = argparse.ArgumentParser(description="FineWeb dataset preprocessing")
 parser.add_argument("-v", "--version", type=str, default="10B", help="Which version of fineweb to use 10B|100B")
 parser.add_argument("-s", "--shard_size", type=int, default=10**8, help="Size of each shard in tokens")
+parser.add_argument("-t", "--tokenizer_path", type=str, default='gpt2', help="Path to tiktoken tokenizer mergefile, or gpt2.")
 args = parser.parse_args()
 
 # FineWeb has a few possible subsamples available
@@ -69,15 +71,29 @@ elif args.version == "350B":
     local_dir = "fineweb350B"
     remote_name = "sample-350BT"
 
-# create the cache the local directory if it doesn't exist yet
-DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
-os.makedirs(DATA_CACHE_DIR, exist_ok=True)
-
 # download the dataset
 fw = load_dataset("HuggingFaceFW/fineweb", name=remote_name, split="train")
 
 # init the tokenizer
-enc = tiktoken.get_encoding("gpt2")
+enc0 = tiktoken.get_encoding("gpt2")
+if args.tokenizer_path != 'gpt2':
+	p = args.tokenizer_path
+	sorted_ranks = tiktoken.load.load_tiktoken_bpe(p)
+	enc = tiktoken.Encoding(
+		name='bpeasy',
+		pat_str=enc0._pat_str,
+		mergeable_ranks=sorted_ranks,
+		special_tokens={'<|endoftext|>': len(sorted_ranks)},
+	)
+	tokenizer_key = os.path.basename(p)[:-4]
+else:
+	tokenizer_key = 'gpt2'
+	enc = enc0
+
+# create the cache the local directory if it doesn't exist yet
+DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir+'_'+tokenizer_key)
+os.makedirs(DATA_CACHE_DIR, exist_ok=True)
+
 eot = enc._special_tokens['<|endoftext|>'] # end of text token
 def tokenize(doc):
     # tokenizes a single document and returns a numpy array of uint16 tokens
