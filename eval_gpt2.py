@@ -295,7 +295,7 @@ if __name__ == "__main__":
     model.eval()
     for ckpt in glob.glob(args.checkpoints):
         sd = torch.load(ckpt)['model']
-        sd = {k[len('_orig_mod.'):]: v for k, v in sd.items()}
+        #sd = {k[len('_orig_mod.'):]: v for k, v in sd.items()}
         model.load_state_dict(sd)
         val_loader.reset()
         with torch.no_grad():
@@ -308,7 +308,7 @@ if __name__ == "__main__":
                 x_val, y_val = val_loader.next_batch()
                 _, loss = model(x_val, y_val, return_logits=False)
                 val_loss += loss
-            dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
+            #dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
             val_loss /= args.val_steps
         # log to console and to file
         print0(f"val loss {val_loss}")
