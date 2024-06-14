@@ -250,8 +250,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # file system input / output
     parser.add_argument("--input_val_bin", type=str, default="", help="input .bin to eval validation loss on")
-    parser.add_argument("--model", type=str, default="d12", help="d12|d24|d36|d48")
-    parser.add_argument("--checkpoint", type=str, help="path to model checkpoint")
+    parser.add_argument("--model", type=str, default="gpt2", help="gpt2|gpt2-medium|gpt2-large|gpt2-xl|d12|d24|d36|d48")
+    parser.add_argument("--checkpoints", type=str, help="path to model checkpoints")
     # token layout for each step of the optimization
     parser.add_argument("--batch_size", type=int, default=4, help="batch size, in units of #batch dimensions")
     parser.add_argument("--sequence_length", type=int, default=64, help="sequence length")
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     # load tokens
     val_loader = DistributedDataLoader(args.input_val_bin, B, T, ddp_rank, ddp_world_size)
 
-    # init the model from scratch
+    # init the model
     num_vocab = 50257
     model_config = {
         "d12": GPTConfig(vocab_size=num_vocab, n_layer=12, n_head=12, n_embd=768),
@@ -287,31 +287,31 @@ if __name__ == "__main__":
         "d48": GPTConfig(vocab_size=num_vocab, n_layer=48, n_head=25, n_embd=1600),
     }[args.model]
     model = GPT(model_config).cuda()
-    sd = torch.load(args.checkpoint)['model']
-    sd = {k[len('_orig_mod.'):]: v for k, v in sd.items()}
-    model.load_state_dict(sd)
     if hasattr(config, "coordinate_descent_tuning"):
         config.coordinate_descent_tuning = True # suggested by @Chillee
     print0("compiling the model...")
     model = torch.compile(model)
 
-    # once in a while evaluate the validation dataset
     model.eval()
-    val_loader.reset()
-    with torch.no_grad():
-        val_loss = 0.0
-        from tqdm import tqdm
-        it = range(args.val_steps)
-        if master_process:
-            it = tqdm(it)
-        for _ in it:
-            x_val, y_val = val_loader.next_batch()
-            _, loss = model(x_val, y_val, return_logits=False)
-            val_loss += loss
-        dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
-        val_loss /= args.val_steps
-    # log to console and to file
-    print0(f"val loss {val_loss}")
+    for ckpt in glob.glob(args.checkpoints):
+        sd = torch.load(ckpt)['model']
+        sd = {k[len('_orig_mod.'):]: v for k, v in sd.items()}
+        model.load_state_dict(sd)
+        val_loader.reset()
+        with torch.no_grad():
+            val_loss = 0.0
+            from tqdm import tqdm
+            it = range(args.val_steps)
+            if master_process:
+                it = tqdm(it)
+            for _ in it:
+                x_val, y_val = val_loader.next_batch()
+                _, loss = model(x_val, y_val, return_logits=False)
+                val_loss += loss
+            dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
+            val_loss /= args.val_steps
+        # log to console and to file
+        print0(f"val loss {val_loss}")
 
     # -------------------------------------------------------------------------
     # clean up nice
