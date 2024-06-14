@@ -250,7 +250,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # file system input / output
     parser.add_argument("--input_val_bin", type=str, default="", help="input .bin to eval validation loss on")
-    parser.add_argument("--model", type=str, default="gpt2", help="gpt2|gpt2-medium|gpt2-large|gpt2-xl|d12|d24|d36|d48")
+    parser.add_argument("--model", type=str, default="d12", help="d12|d24|d36|d48")
     parser.add_argument("--checkpoints", type=str, help="path to model checkpoints")
     # token layout for each step of the optimization
     parser.add_argument("--batch_size", type=int, default=4, help="batch size, in units of #batch dimensions")
