@@ -258,7 +258,7 @@ if __name__ == "__main__":
     parser.add_argument("--input_bin", type=str, default="dev/data/tinyshakespeare/tiny_shakespeare_val.bin", help="input .bin to train on")
     parser.add_argument("--input_val_bin", type=str, default="", help="input .bin to eval validation loss on")
     parser.add_argument("--output_dir", type=str, default="", help="output directory to which to write logs and checkpoints")
-    parser.add_argument("--model", type=str, default="gpt2", help="gpt2|gpt2-medium|gpt2-large|gpt2-xl|d12|d24|d36|d48")
+    parser.add_argument("--model", type=str, default="d12", help="d12|d24|d36|d48")
     # token layout for each step of the optimization
     parser.add_argument("--batch_size", type=int, default=4, help="batch size, in units of #batch dimensions")
     parser.add_argument("--sequence_length", type=int, default=64, help="sequence length")
@@ -277,7 +277,6 @@ if __name__ == "__main__":
 
     # args error checking and convenience variables
     B, T = args.batch_size, args.sequence_length
-    #assert 1 <= T <= 1024
     assert args.model in {"d12", "d24", "d36", "d48"}
 
     # set up DDP (distributed data parallel). torchrun sets this env variable
@@ -290,7 +289,6 @@ if __name__ == "__main__":
     device = f'cuda:{ddp_local_rank}'
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
-    seed_offset = 0 # each process gets the exact same seed
     print(f"using device: {device}")
 
     tokens_per_fwdbwd = B * T * ddp_world_size
